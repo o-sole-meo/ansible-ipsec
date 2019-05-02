@@ -10,6 +10,9 @@ continuous integration environments. The confidentiality of communications depen
 stored in Ansible configuration, that is further used to derive protocol-level secrets. Full rekeying
 of the whole network can be  achieved as a matter of changing the secret and re-running Ansible playbook.
 
+I do offer professional support for the solution, please [contact me](https://webcookies.org/contact/) for
+more information.
+
 ## Changelog
 * v1.1 - full support for IPv6, bugfixes
 * v1.0 - initial release
@@ -34,13 +37,21 @@ must be enabled.
 
 ## Firewall
 
-For IPSec to work the following ports and protocols must be opened:
-
-* `500/udp` IKE (`iptables -A INPUT -p udp --dport 500 -j ACCEPT`)
-* `esp` the ESP protocol (`iptables -A INPUT -p esp -j ACCEPT`)
-
 These ports should be only opened to the other IPSec peers, there's no need to open them
-publicly.
+publicly (you need to adjust the rules in the `-s ...` parameter). Note that this Ansible
+role **does not** touch the firewall so you need to take care about this on your own.
+
+### IKE mode
+In `ipsec_mode: ike` the following port and protocol need to be allowed on firewall:
+
+* `500/udp` IKE opened by the `racoon` daemon (`iptables -A INPUT -s ... -p udp --dport 500 -j ACCEPT`)
+* `esp` the ESP protocol handled by the kernel (`iptables -A INPUT -s ... -p esp -j ACCEPT`)
+
+### Setkey mode
+
+In `ipsec_mode: setkey` there's no need to open IKE so only `esp` protocol needs to be available:
+
+* `esp` the ESP protocol (`iptables -A INPUT -p esp -j ACCEPT`)
 
 ## Configuration
 
@@ -68,7 +79,7 @@ By default SAD/SPD entries will be created for both IPv4 and IPv6. If either of 
 it here but make sure it remains a list. These are Ansible variable names containing IPv4 and IPv6 address
 of the default interface collected during [fact caching](https://docs.ansible.com/ansible/latest/user_guide/playbooks_variables.html#fact-caching). 
 
-    ipset_inet:
+    ipsec_inet:
     - 'ansible_default_ipv6'
     - 'ansible_default_ipv4'
 
@@ -82,8 +93,13 @@ Example:
 
     ipsec_policy: 'use'
     
-Note that `disable` will only remove the kernel-level IPSec policies, stopping any attempts to establish
+The `disable` flag will only remove the kernel-level IPSec policies, stopping any attempts to establish
 and require IPSec for the current traffic but IKE configuration will remain in place as no-op.
+
+**Important:** the `use` option should be only used in testing for as long as necessary to confirm
+your IPSec associations are working correctly. Specifically, `use` does **not** guarantee that kernel
+will *always* apply IPSec so you may see unencrypted traffic with this option even if IPSec can be
+established.
 
 ### Keying method
 * `ike` is the preferred keying mode with IKE daemon managing keys and refreshing them at proper
@@ -130,7 +146,7 @@ and hurt performance.
 ## How are keys derived?
 
 ### ipsec_secret
-The `ipsec_secret` constant is a master secret from which all pre-shared secrets for `ike` mode and keys for 'setkey'
+The `ipsec_secret` constant is a master secret from which all pre-shared secrets for `ike` mode and keys for `setkey`
 more are generated. The master secret only lives on the deployment server running Ansible and should be protected
 using [Ansible Vault](https://docs.ansible.com/ansible/latest/cli/ansible-vault.html) or similar secret management
 solutions.
